@@ -1,0 +1,501 @@
+---
+title: "Categorical data with tidyverse" 
+subtitle: "Provisional file"
+author: "Insert your name here"
+output: 
+  html_document:
+    theme: spacelab
+    highlight: tango
+    df_print: paged
+    toc: true
+    toc_float: false
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load necessary packages
+```{r loading, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(skimr)
+library(forcats)
+library(tidyr)
+library(stringr)
+library(scales)
+```
+
+# Explore your dataset
+
+## load dataset and take a glimpse
+```{r}
+multiple_choice_responses <- read_csv("Data/smc_with_js.csv")
+
+# have a glimpse
+skim(multiple_choice_responses)
+```
+
+## Check for factors
+```{r}
+is.factor(multiple_choice_responses$CurrentJobTitleSelect)
+```
+
+## Convert all the character variables into factors
+```{r}
+responses_as_factors <- multiple_choice_responses %>% 
+  mutate_if(is.character,as.factor)
+```
+
+## determine the number of levels of each factor
+```{r}
+number_of_levels <- responses_as_factors %>% 
+  summarise_all(nlevels) %>% 
+  gather(variable,num_levels)
+```
+
+## Select the 3 rows with the highest number of levels
+
+```{r}
+number_of_levels %>% 
+  top_n(3,num_levels)
+```
+
+```{r}
+## Filtering for the variable `CurrentJobTitleSelect`, pull the number of levels it has.
+
+number_of_levels %>% 
+  filter(variable == "CurrentJobTitleSelect") %>%
+  pull()
+```
+
+## `pull()` the column `CurrentJobTitleSelect.` and get the values of the levels.
+```{r}
+responses_as_factors %>% 
+  pull(CurrentJobTitleSelect) %>%
+  levels()
+```
+
+## reordering bar charts by frequency
+```{r}
+responses_as_factors %>% 
+  filter(!is.na(CurrentJobTitleSelect)) %>% 
+ggplot(aes(x = fct_infreq(CurrentJobTitleSelect))) + geom_bar(fill = "orange", color = "black") + coord_flip() + theme_minimal()
+```
+
+## Try reversing the order 
+```{r}
+responses_as_factors %>% 
+  filter(!is.na(CurrentJobTitleSelect)) %>% 
+ggplot(aes(x = fct_rev(fct_infreq(CurrentJobTitleSelect)))) + geom_bar(fill = "orange", color = "black") + coord_flip() + theme_minimal()
+```
+
+## Changing the order of factor levels
+```{r}
+# Get the levels of WorkInternalVsExternalTools
+levels(responses_as_factors$WorkInternalVsExternalTools)
+
+# Reorder the levels from internal to external 
+responses_as_factors <- responses_as_factors %>% 
+  mutate(WorkInternalVsExternalTools = fct_relevel(WorkInternalVsExternalTools, "Entirely internal", "More internal than external", "Approximately half internal and half external", "More external than internal","Entirely external" , "Do not know"))
+```
+
+```{r}
+# Check
+levels(responses_as_factors$WorkInternalVsExternalTools)
+```
+
+## Make a bar plot of the responses
+```{r}
+responses_as_factors %>% 
+  filter(!is.na(WorkInternalVsExternalTools)) %>% 
+ggplot(aes(x = WorkInternalVsExternalTools)) + geom_bar() + coord_flip()
+```
+
+## Tricks of `fct_relevel()`
+```{r}
+# Pick another variable
+levels(responses_as_factors$FormalEducation)
+```
+
+```{r}
+# Move "I did not complete any formal education past high school" and "Some college/university study without earning a bachelor's degree" to the front. 
+
+responses_as_factors <- responses_as_factors %>% 
+  mutate(FormalEducation = fct_relevel(FormalEducation,
+                                       "I did not complete any formal education past high school", "Some college/university study without earning a bachelor's degree")) %>% 
+  # Move "I prefer not to answer" to be the last level.
+  mutate(FormalEducation = fct_relevel(FormalEducation, "I prefer not to answer", after = Inf)) %>% 
+  # Move "Doctoral degree" to be the sixth level (after the fifth level).
+  mutate(FormalEducation = fct_relevel(FormalEducation, "Doctoral degree", after = 5))
+```
+
+```{r}
+# Examine
+levels(responses_as_factors$FormalEducation)
+```
+
+## Renaming a few levels
+```{r}
+# make a bar plot of the frequency of FormalEducation
+ggplot(responses_as_factors, aes(x= FormalEducation)) + geom_bar()
+```
+
+```{r}
+# Now, rename "I did not complete any formal education past high school" to "High school" and "Some college/university study without earning a bachelor's degree" to "Some college".
+
+responses_as_factors <- responses_as_factors %>% 
+  mutate(FormalEducation = fct_recode(FormalEducation,
+                                      "High school" = "I did not complete any formal education past high school",
+                                      "Some college" = "Some college/university study without earning a bachelor's degree"))
+
+# Test again and create a new bar plot
+ggplot(responses_as_factors, aes(x= FormalEducation)) + geom_bar() + coord_flip()
+
+```
+
+## Collapsing factor levels
+```{r}
+# Examine the factor CurrentJobTitleSelect
+levels(responses_as_factors$CurrentJobTitleSelect)
+
+```
+
+Collapse the levels of `CurrentJobTitleSelect` into a new variable, `grouped_titles`.
+```{r}
+responses_as_factors %>% 
+  mutate(grouped_titles = fct_collapse(CurrentJobTitleSelect,
+                                       "Computer Scientist" = c("Programmer", "Software Developer/Software Engineer"), 
+        "Researcher" = "Scientist/Researcher", 
+        "Data Analyst/Scientist/Engineer" = c("DBA/Database Engineer", "Data Scientist", 
+                                              "Business Analyst", "Data Analyst", 
+                                              "Data Miner", "Predictive Modeler"))) %>% 
+  # Then take grouped_titles and put everything that isn't one of those three grouped titles into "Other Title". 
+  mutate(grouped_titles = fct_other(grouped_titles, keep = c("Computer Scientist", 
+                                     "Researcher", 
+                                     "Data Analyst/Scientist/Engineer"))) %>% count(grouped_titles)
+```
+
+## lumping variables
+```{r}
+responses_as_factors %>%
+  # remove NAs of MLMethodNextYearSelect
+  filter(!is.na(MLMethodNextYearSelect)) %>%
+  # create ml_method, which lumps all those with less than 5% of people into "Other"
+  mutate(ml_method = fct_lump(MLMethodNextYearSelect, prop = 0.05)) %>%
+  # count the frequency of your new variable, sorted in descending order
+  count(ml_method, sort = TRUE)
+```
+
+## Preserving the most common levels
+```{r}
+responses_as_factors %>%
+  # remove NAs 
+  filter(!is.na(MLMethodNextYearSelect)) %>%
+  # create ml_method, retaining the 5 most common methods and renaming others "other method" 
+  mutate(ml_method = fct_lump(MLMethodNextYearSelect, n = 5, other_level = "other method")) %>%
+  # count the frequency of your new variable, sorted in descending order
+  count(ml_method, sort = TRUE)
+```
+
+## Grouping and reshaping similar columns
+```{r}
+# Select only the columns with `LearningPlatformUsefulness` in the name.
+learning_platform_usefulness <- responses_as_factors %>% 
+  select(contains("LearningPlatformUsefulness")) %>% 
+  # Change the data from wide to long format with two columns, learning_platform and usefulness.
+  gather(learning_platform, usefulness) %>% 
+  # Remove rows where usefulness is NA.
+  filter(!is.na(usefulness)) %>% 
+  # Remove "LearningPlatformUsefulness" from each string in learning_platform.
+  mutate(learning_platform = str_remove(learning_platform, "LearningPlatformUsefulness"))
+```
+
+```{r}
+# examine your data
+glimpse(learning_platform_usefulness)
+```
+
+## Summarizing data
+```{r}
+# Use count() to change the dataset to have one row per learning_platform usefulness pair with a column that is the number of entries with that pairing.
+
+learning_platform_usefulness %>% 
+  count(learning_platform, usefulness)
+```
+
+```{r}
+   # Use add_count() to create a column with the total number of answers to that learning_platform.
+learning_platform_usefulness %>% 
+  count(learning_platform, usefulness) %>% 
+  add_count(learning_platform, wt = n, name="nn")
+
+```
+
+
+```{r}
+#Create a new column, perc, that's the percent of people giving a certain answer for that question. Save everything as a new dataset, perc_useful_platform.
+
+(perc_useful_platform <- learning_platform_usefulness %>% 
+  count(learning_platform, usefulness) %>% 
+  add_count(learning_platform, wt = n, name="nn") %>% 
+  mutate(perc = n/nn))
+```
+
+```{r}
+# For each learning platform, create a line graph with usefulness on the x-axis and percentage of responses within the learning platforms on the y-axis.
+
+ggplot(perc_useful_platform, aes(x = usefulness, y = perc, group = learning_platform, fill = usefulness)) + geom_col() + facet_wrap(~learning_platform) + theme_bw() + theme(
+  axis.ticks.x = element_blank(), axis.text.x = element_blank()
+)
+```
+
+## Creating an initial plot
+```{r}
+# Using the dataset learning_platform_usefulness, change usefulness to equal 0 if someone answered "Not Useful" and 1 otherwise.
+learning_platform_usefulness %>% 
+  mutate(usefulness = ifelse(usefulness == "Not Useful",0,1))
+```
+
+```{r}
+usefulness_by_platform <- learning_platform_usefulness %>% 
+ mutate(usefulness = ifelse(usefulness == "Not Useful",0,1)) %>%
+  # Group the data by each platform.
+  group_by(learning_platform) %>% 
+# Create a new column, avg_usefulness, the mean usefulness of each platform.
+  summarise(avg_usefulness = mean(usefulness))
+# Save the result as a new dataset, usefulness_by_platform
+
+#examine the dataset
+usefulness_by_platform
+```
+
+
+## Tricks of ggplot2
+
+### Editing plot text
+```{r}
+# Create a scatter plot of avg_usefulness by learning_platform, using the dataset you created, usefulness_by_platform.
+ggplot(usefulness_by_platform, aes(y = avg_usefulness, x = learning_platform)) + geom_point() + theme(
+  axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, face = "bold")
+) + labs(x = "Learning Platform", y = "Percent finding at least somewhat useful") +
+  # Change the y-axis scale to be a percentage
+  scale_y_continuous(labels = scales::percent)
+```
+2363137
+2363314
+2362483
+### Reordering graphs (Ascendingly)
+```{r}
+# Order learning_platform in the graph by avg_usefulness so that, from left to right, it goes from highest usefulness to lowest.
+
+ggplot(usefulness_by_platform, aes(y = avg_usefulness, x = fct_reorder(learning_platform, avg_usefulness))) + geom_point() + theme(
+  axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, face = "bold")
+) + labs(x = "Learning Platform", y = "Percent finding at least somewhat useful") +
+  # Change the y-axis scale to be a percentage
+  scale_y_continuous(labels = scales::percent)
+```
+
+### Ordering graphs (descendingly)
+```{r}
+# Order learning_platform in the graph by avg_usefulness so that, from left to right, it goes from highest usefulness to lowest.
+
+ggplot(usefulness_by_platform, aes(y = avg_usefulness, x = fct_rev(fct_reorder(learning_platform, avg_usefulness)))) + geom_point() + theme(
+  axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, face = "bold")
+) + labs(x = "Learning Platform", y = "Percent finding at least somewhat useful") +
+  # Change the y-axis scale to be a percentage
+  scale_y_continuous(labels = scales::percent)
+```
+
+## Changing and creating variables with case_when()
+### case_when() with a single variable
+```{r}
+# filter for rows where Age is between 10 and 90
+responses_as_factors %>% 
+  filter(Age >= 10 & Age <= 90) %>% 
+  # Create the generation variable based on age 
+  mutate(generation = case_when(
+    between(Age,10,22) ~ "Gen Z",
+    between(Age,23,37) ~ "Gen Y",
+    between(Age,38,52) ~ "Gen X",
+    between(Age,53,71) ~ "Baby Boomer",
+    between(Age,72,90) ~ "Silent",
+  )) %>% 
+  count(generation)
+```
+
+### case_when() from multiple variables
+```{r}
+responses_as_factors %>% 
+# Filter out people who selected Data Scientist as their Job Title
+  filter(!(CurrentJobTitleSelect == "Data Scientist"))
+```
+
+```{r}
+# Create a new variable, job_identity, based on their current job title and whether they fully identify as a data scientist.
+responses_as_factors %>%
+  # Filter out people who selected Data Scientist as their Job Title
+    filter(CurrentJobTitleSelect != "Data Scientist") %>%
+    # Create a new variable, job_identity
+    mutate(job_identity = case_when(
+        CurrentJobTitleSelect == "Data Analyst" & 
+        DataScienceIdentitySelect == "Yes" ~ "DS analysts", 
+        CurrentJobTitleSelect == "Data Analyst" & 
+        DataScienceIdentitySelect %in% c("No", "Sort of (Explain more)") ~ "NDS analyst", 
+        CurrentJobTitleSelect != "Data Analyst" & 
+        DataScienceIdentitySelect == "Yes" ~ "DS non-analysts", 
+        TRUE ~ "NDS non analysts")) %>% 
+  mutate(JobSatisfaction=parse_number(as.character(JobSatisfaction))) %>% 
+  group_by(job_identity) %>% 
+  summarise(avg_js = mean(JobSatisfaction, na.rm = TRUE))
+
+```
+
+## Case study on Flight Etiquette
+
+- loading data
+```{r}
+flying_etiquette <- read_csv("Data/flying-etiquette.csv")
+```
+
+- take a glimpse so you have all your variables in hands
+```{r}
+skim(flying_etiquette)
+```
+
+
+- Change all character columns into factor columns and remove people who responded "Never" to a question asking if they have flown before. 
+```{r}
+# useful trick here is mutate_if
+flying_etiquette %>% 
+  #change character variable to factor
+  mutate_if(is.character, as.factor) %>% 
+  # Filter out those who have never flown on a plane
+  filter(`How often do you travel by plane?` != "Never")
+```
+
+- Select columns where "rude" is in the column name. 
+- Change the dataset from "wide" to "long", with the variable names in a column called "response_var" and the values in a column called "value."
+```{r}
+# Copy the previous chunk and save your work to gathered_data
+gathered_data <- flying_etiquette %>% 
+  #change character variable to factor
+  mutate_if(is.character, as.factor) %>% 
+  # Filter out those who have never flown on a plane
+  filter(`How often do you travel by plane?` != "Never") %>%
+  # Select columns where "rude" is in the column name.
+  select(contains("rude")) %>%
+  # Change format from wide to long
+  gather("response_var", "value")
+```
+
+- Check your data
+```{r}
+glimpse(gathered_data)
+```
+
+## Data preparation and regex
+- Use `str_remove` to remove everything before and including "rude to " (with the space at the end) in the `response_var` column.
+
+```{r}
+gathered_data %>% 
+  # Remove everything before and including "rude to " (with that space at the end!)
+  mutate(response_var = str_remove(response_var,".*rude to ")) %>% 
+  # Remove "on a plane"
+  mutate(response_var = str_remove(response_var, " on a plane"))
+```
+
+- Remove rows with NA in the value column
+- Create a new variable, rude, which is 0 if the value column is "No, not rude at all" or "No, not at all rude" and 1 otherwise.
+```{r}
+dichotimized_data <- gathered_data %>% 
+  # Remove everything before and including "rude to " (with that space at the end!)
+  mutate(response_var = str_replace(response_var,".*rude to ","")) %>% 
+  # Remove "on a plane"
+  mutate(response_var = str_replace(response_var, " on a plane","")) %>%
+  # Remove rows with NA in the value column
+  filter(!is.na(value)) %>%
+  # Dichotomize the value variable to make a new variable, rude
+  mutate(rude = if_else(value %in% c("No, not rude at all", "No, not at all rude"), 0,1))
+  
+```
+
+- Check your data
+```{r}
+head(dichotimized_data,10)
+```
+
+
+- Summarise the data set into two columns, the question (i.e. `response_var`), and a new column, `perc_rude`, the mean of the `rude` column for each question.
+- Save it as `rude_behaviors` and then view your new dataset.
+
+```{r}
+rude_behaviors <- gathered_data %>%
+    mutate(response_var = str_replace(response_var, '.*rude to ', '')) %>%
+    mutate(response_var = str_replace(response_var, 'on a plane', '')) %>%
+	# Remove rows that are NA in the value column
+	filter(!is.na(value)) %>%
+    mutate(rude = if_else(value %in% c("No, not rude at all", "No, not at all rude"), 0, 1)) %>%
+  # Group by response_var
+  group_by(response_var) %>% 
+  # Create perc_rude, the percent considering each behavior rude
+  summarise(perc_rude = mean(rude))
+```
+
+- Examine your data
+```{r}
+rude_behaviors
+```
+
+## Receating the plot
+
+- Order `response_var` by `perc_rude`
+- Make a bar plot of `response_var` by `perc_rude`. Save it as `initial_plot`.
+
+```{r}
+initial_plot <- rude_behaviors %>% 
+  ggplot(aes(x = fct_reorder(response_var, perc_rude), y = perc_rude)) + geom_col()
+
+#View your plot
+initial_plot
+```
+
+- To match the FiveThirtyEight graph:
+  - Add its title, subtitle, and caption
+  - Set the labels for x and y-axis as empty strings
+  - Save it as a new plot, `titled_plot`.
+
+```{r}
+titled_plot <- initial_plot + 
+  labs(title = "Hell Is Other People In A Pressurized Metal Tube",
+       subtitle = "Percentage of 874 air-passenger respondents who said action is very or somewhat rude",
+       caption = "Source: SurveyMonkey Audience", x="", y="")
+
+titled_plot
+```
+
+- Flipping things around
+  - Flip the x- and y-axis.
+  - Remove the x-axis ticks.
+```{r}
+flipped_plot <- initial_plot + 
+  coord_flip() + 
+  # Remove the x-axis ticks and labels
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+flipped_plot
+```
+
+- Finalizing the chart
+  - Apply `percent()` to `perc_rude` to add a label to each bar with the percent rude value, so it will display as "85%".
+```{r fig.height=10, fig.width=20}
+# adding labels to bar plots
+flipped_plot + theme_bw() + geom_text(aes(label = percent(perc_rude),
+                             y = perc_rude + 0.03),
+                         position = position_dodge(0.9),
+              vjust = 1, color = "blue", fontface = "bold") + labs(y = "% rudeness", x = "Participants' responses") + theme(text = element_text(family = "serif", colour = "gray25", size = 20, face = "bold"))
+```
+  
+  

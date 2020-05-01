@@ -1,0 +1,306 @@
+---
+title: "The reduction in weekly working hours in Europe" 
+subtitle: "Looking at the development between 1996 and 2006"
+author: "Insert your name here"
+output: 
+  html_document:
+    theme: spacelab
+    highlight: tango
+    df_print: paged
+    toc: true
+    toc_float: false
+    code_folding: hide
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load necessary packages
+```{r loading, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(skimr)
+library(forcats)
+```
+
+
+
+# load data
+```{r}
+ilo_working_hours <- get(load("Data/ilo_working_hours.RData"))
+ilo_hourly_compensation <- get(load("Data/ilo_hourly_compensation.RData"))
+```
+
+
+# explore your dataset
+```{r}
+glimpse(ilo_working_hours)
+glimpse(ilo_hourly_compensation)
+```
+
+```{r}
+ilo_data <- ilo_working_hours %>% 
+  inner_join(ilo_hourly_compensation, c("country","year"))
+```
+
+```{r}
+# I will reverese the two datasets to see whether they differ or not
+ilo_hourly_compensation %>% 
+  inner_join(ilo_working_hours, c("country","year"))
+```
+
+Well. Both outputs are identical. It looks like that it doesn't matter.
+
+```{r}
+# Count the resulting rows
+ilo_data %>% 
+  count()
+```
+
+```{r}
+#examine ilo_data
+ilo_data
+```
+
+```{r}
+#Turn year and country into a factor
+ilo_data_corrected <- ilo_data %>% 
+  mutate(year = as.factor(as.numeric(year)),
+         country = as.factor(country))
+# examine changes
+glimpse(ilo_data_corrected)
+```
+
+```{r}
+# Select European countries
+european_countries <- c("France", "Italy","Norway","Finland","Spain", "Sweden","United Kingdom","Belgium","Ireland","Luxembourg","Portugal","Netherlands","Germany","Hungary","Austria", "Czech Rep.","Switzerland")
+
+#check the length of European countries (it should be 17)
+length(european_countries)
+ilo_eu <- ilo_data_corrected %>% 
+  filter(country %in% european_countries)
+```
+
+```{r}
+# examine your data
+str(ilo_eu)
+```
+
+```{r}
+# do some calculations by year
+ilo_eu %>% 
+  group_by(year) %>% 
+  summarize(mean_hourly_compensation = mean(hourly_compensation),
+            mean_working_hours = mean(working_hours))
+```
+
+```{r}
+# filter for 2006
+plot_data <-  ilo_eu %>% 
+  filter(year == 2006)
+
+# Create the scatter plot and adding necessary lables
+# then save it in order to make further edits and customizations
+ilo_plot <- ggplot(plot_data) +
+  geom_point(aes(x = working_hours, y = hourly_compensation)) +
+  labs(title = "The more people work, the less compensation they seem to receive",
+      x = "Working hours per week",
+      y = "Hourly compensation",
+      subtitle = "Working hours and hourly compensation in European countries, 2006",
+      caption = "Data source: ILO, 2017"
+  )
+
+#check ilo_plot
+ilo_plot
+```
+
+```{r}
+# Try out the minimal theme
+ilo_plot + theme_minimal()
+```
+
+```{r}
+ilo_plot + theme_bw()
+```
+
+```{r}
+# Let's make more customization to the text
+ilo_plot <- ilo_plot + theme_minimal() + 
+  theme(text = element_text(family = "serif"),
+        plot.title = element_text(color = "gray25",face = "bold", size = 15),
+        plot.caption = element_text(color = "blue", face = "bold"),
+        plot.subtitle = element_text(size = 12))
+
+# observe
+ilo_plot
+```
+
+```{r}
+# We can even do more customization to our plot (background and dimension)
+ilo_plot + theme(
+  plot.background= element_rect(fill = "gray95"),
+  plot.margin = unit(c(5,10,5,10), units = "mm")
+)
+```
+
+# Prepare the data set for the faceted plot
+
+You're now going to prepare your data set for producing the faceted scatter plot in the next exercise, as mentioned in the video.
+For this, the data set needs to contain only the years 1996 and 2006, because your plot will only have two facets. ilo_data has been pre-loaded for you.
+
+
+```{r}
+ilo_data_96_06 <-ilo_data_corrected %>%
+  filter(year == 2006 | year == 1996)
+```
+
+```{r}
+# Put your variables
+ggplot(ilo_data_96_06, aes(x = working_hours, y = hourly_compensation, color = year)) + geom_point() + 
+labs( #add your lables' details here
+      title = "The more people work, the less compensation they seem to receive",
+      subtitle = "Working hours and hourly compensation in European countries,2006",
+      caption = "Data source: ILO, 2017",
+      x = "Working hours per week",
+      y = "Hourly compensation"
+  ) + # use facet_grid()
+facet_grid(. ~ year)
+
+# let's save our plot to a variable
+plot1 <- ggplot(ilo_data_96_06, aes(x = working_hours, y = hourly_compensation, color = year)) + geom_point() + 
+labs( #add your lables' details here
+      title = "The more people work, the less compensation they seem to receive",
+      subtitle = "Working hours and hourly compensation in European countries,2006",
+      caption = "Data source: ILO, 2017",
+      x = "Working hours per week",
+      y = "Hourly compensation"
+  ) + # use facet_grid()
+facet_grid(. ~ year)
+```
+
+```{r}
+# Make your own theme
+theme_ilo <- function(){
+  theme_minimal() +
+    theme(
+    plot.background = element_rect(fill = "gray95"),
+    text = element_text(family = "serif", colour = "gray25"),
+    plot.title = element_text(face = "bold"),
+    plot.caption = element_text(color ="blue", face = "bold"),
+    plot.margin = unit(c(5,10,5,10), units = "mm"),
+    plot.subtitle = element_text(size = 12)
+  )
+}
+```
+
+```{r}
+# test your theme
+plot1 + theme_ilo()
+```
+
+```{r}
+# let's make one more customization
+plot1 + theme_ilo() + theme_bw() + theme(text = element_text(family = "serif"), plot.title = element_text(face = "bold"),
+  strip.background = element_rect(color= "black", fill = "gray60"),
+  strip.text = element_text(color ="white",face = "bold", family = "serif")
+)
+```
+
+# How to create dot plots (interesting one!) using geom_path
+```{r}
+# create a dot plot using ilo_data_corrected
+ggplot(ilo_data_96_06, aes(x = working_hours, y= country)) + geom_path() + theme_minimal()
+```
+
+```{r}
+# let's add an arrow to each path (we must only use two points in time)
+ggplot(ilo_data_96_06) + 
+  geom_path(aes(x=working_hours, y = country), arrow = arrow(length = unit(1.5,"mm"), type = "closed")) + geom_text(
+          aes(x = working_hours,
+              y = country,
+              label = round(working_hours, 1))
+        )
+```
+
+# Next time I will polish the dot plot
+```{r}
+# To arrange countries according to working hours, we need to use `forcats` package and reorder the `country` factor
+ilo_data_96_06 <- ilo_data_96_06 %>% 
+  arrange(year) %>% 
+  mutate(country = fct_reorder(country, working_hours, min))
+
+# test your changes
+ilo_data_96_06$country
+
+# Plot again
+ggplot(ilo_data_96_06) + 
+  geom_path(aes(x=working_hours, y = country), arrow = arrow(length = unit(1.5,"mm"), type = "closed")) + geom_text(
+          aes(x = working_hours,
+              y = country,
+              label = round(working_hours, 1))
+        )
+
+```
+
+```{r}
+
+# let's plot again after adjusting lables
+plot_object <- ggplot(ilo_data_96_06) + 
+  geom_path(aes(x=working_hours, y = country), arrow = arrow(length = unit(1.5,"mm"), type = "closed")) + geom_text(
+          aes(x = working_hours,
+              y = country,
+              label = round(working_hours, 1),
+              hjust = ifelse(year == "2006",1.4,-0.4)),
+          family = "serif", colour = "blue",size = 2
+        )
+```
+
+As you can see, there is a lot of overlapping in the graph. We will solve this using either `coord_cartesian` or `xlim` and `ylim` functions.
+
+```{r}
+#let's make more adjustments with dimensions
+ilo_dot_plot <- plot_object + coord_cartesian(xlim = c(20,80)) + 
+labs( #add your lables' details here
+      title = "The more people work, the less compensation they seem to receive",
+      subtitle = "Working hours and hourly compensation in European countries,2006",
+      caption = "Data source: ILO, 2017",
+      x = "Working hours per week",
+      y = "Hourly compensation"
+  ) + theme_ilo() 
+```
+
+```{r}
+#optimize for mobile devices
+# Compute temporary data set for optimal label placement
+median_working_hours <- ilo_data_corrected %>%
+  group_by(country) %>%
+  summarize(median_working_hours_per_country = median(working_hours)) %>%
+  ungroup()
+
+# Have a look at the structure of this data set
+str(median_working_hours)
+
+ilo_dot_plot +
+  # Add label for country
+  geom_text(data = median_working_hours,
+            aes(y = country,
+                x = median_working_hours_per_country,
+                label = country),
+            vjust = 2,
+            family = "serif",
+            color = "gray25") +
+  # Remove axes and grids
+  theme(
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    # Also, let's reduce the font size of the subtitle
+    plot.subtitle = element_text(size = 9)
+  )
+```
+
+

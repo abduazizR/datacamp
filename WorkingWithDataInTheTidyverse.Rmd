@@ -1,0 +1,254 @@
+
+
+```{r message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(moderndive)
+library(readr)
+library(skimr)
+library(janitor)
+```
+
+
+```{r}
+bakeoff <- read_csv("Data/bakeoff.csv", skip = 1)
+```
+
+```{r}
+# View bakeoff
+bakeoff
+```
+
+```{r}
+# Filter rows where showstopper is UNKNOWN
+bakeoff %>% 
+  lapply(showstopper, is.na)
+```
+
+```{r}
+skim(bakeoff)
+```
+
+# How to parse date
+```{r}
+parse_date("17 August 2010", format = "%d %B %Y")
+```
+
+```{r}
+desserts <- read_csv("Data/Desserts/desserts.csv", col_types = cols(uk_airdate = col_date(format = "%d %B %Y")))
+```
+
+```{r}
+glimpse(desserts)
+```
+
+
+Sort desserts in descending order by uk_airdate. when did the last episode air in the UK?
+```{r}
+desserts %>% 
+  arrange(desc(uk_airdate))
+```
+
+Add another line to cols() to cast the technical column as a number. You will get a parsing error! Read the red text carefully.
+
+```{r}
+desserts <- read_csv("Data/Desserts/desserts.csv", 
+                     col_types = cols(technical = col_number(),
+                     uk_airdate = col_date(format = "%d %B %Y")))
+```
+
+```{r}
+# examine your problems
+problems(desserts)
+```
+
+```{r reference chunk}
+# The problem can be solved by including "N/A" within the na values in read_csv function
+desserts <- read_csv("Data/Desserts/desserts.csv", 
+                     col_types = cols(technical = col_number(),
+                     uk_airdate = col_date(format = "%d %B %Y")),
+                     na = c("","NA","N/A"))
+```
+
+```{r}
+# check
+glimpse(desserts)
+```
+
+
+```{r}
+# Now, we will do some edits to `results` variable. We want to make it factor instead of character
+
+#copy a previous code from chunk 12
+desserts <- read_csv("Data/Desserts/desserts.csv", 
+                     col_types = cols(technical = col_number(),
+                     uk_airdate = col_date(format = "%d %B %Y"),
+                     #add another argument inside cols function
+                     result = col_factor(levels = NULL)),
+                     na = c("","NA","N/A"))
+
+# check if you changes were made correctly
+glimpse(desserts)
+```
+
+```{r}
+# rename the variable signature_nut 
+desserts <- desserts %>% 
+  mutate(nut = signature_nut) %>% 
+  select(-signature_nut)
+```
+
+Count the distinct values in the `nut` variable, sorting the result based on the number of rows. How many bakes included filberts as the nut?
+
+```{r}
+desserts %>% 
+  count(nut,sort = TRUE) %>% 
+  mutate(perc = n/sum(n)*100)
+```
+
+What is a "filbert", you may ask? Recode "filbert" to "hazelnut", store the result in the same nut column, and count again.
+
+```{r}
+desserts %>% 
+  mutate(nut = recode(nut, "filbert" = "hazelnut", "no nut" = NA_character_)) %>% 
+  count(nut, sort = TRUE)
+```
+
+Create a new dummy variable called tech_win: it should be equal to 1 if the baker was ranked first in the technical challenge, and 0 if not. Remember that when recoding numeric variables, you need to put the old value in backticks, for example, `5` = 6.
+
+```{r}
+desserts <- desserts %>% 
+  mutate(tech_win = recode(technical, `1` = 1, .default = 0))
+```
+
+Use count to compare the number of rows where technical is equal to 1 versus all distinct values in the new tech_win variable.
+```{r}
+desserts %>% 
+  count(technical == 1, tech_win)
+```
+
+```{r}
+messy_ratings <- read_csv("Data/Ratings/02.03_messy_ratings.csv")
+```
+
+```{r}
+problems(messy_ratings)
+```
+
+
+    For series with 10 episodes, which showed the most growth in viewers from the premiere to the finale? Which showed the least?
+
+```{r}
+ratings %>% 
+  filter(episodes == 10) %>% 
+  mutate(growth = e10_viewers - e1_viewers) %>% 
+  group_by(series) %>% 
+  select(series, growth)
+  
+```
+
+```{r}
+ratings <- ratings %>% 
+  mutate(bbc = recode(channel, "Channel 4"=0,.default = 1))
+```
+
+```{r}
+ratings %>% 
+  select(channel, everything())
+```
+
+```{r}
+ratings %>% 
+  select(ends_with("day"))
+```
+
+```{r}
+glimpse(messy_ratings)
+```
+
+```{r}
+viewers_7day <- ratings %>% 
+  select(series, ends_with("_7day") )
+```
+
+```{r}
+viewers_7day %>% 
+  select(viewers_7day_ = ends_with("_7day"))
+```
+
+```{r}
+ratings %>% 
+  select(ends_with("_7day"),-ends_with("_28day"))
+```
+
+```{r}
+ggplot(rating, aes(x = series, y= e1)) + geom_col()
+```
+
+
+```{r}
+ratings %>% 
+  gather(key = "episode", value = "viewers_7day", e1:e10, factor_key = TRUE ,na.rm = TRUE)
+```
+
+```{r}
+ggplot(tidy_ratings, aes(x = episode, y = viewers_7day, fill = series)) + geom_col()
+```
+
+```{r}
+ratings2 %>% 
+  gather(key = "episode", value = "viewers", e1_7day:e10_28day, na.rm = TRUE) %>% 
+  separate(episode, into = c("episode", "day")) %>% 
+  mutate(episode = parse_number(episode), day = parse_number(day))
+```
+
+```{r}
+ratings %>% 
+  gather(key = "episode", value = "viewers", e1:e10, na.rm = TRUE) %>% 
+  mutate(episode = parse_number(episode)) %>% 
+  ggplot(aes(x = episode, y = viewers, group = series, color = series)) + geom_point() + facet_wrap(~series) + theme_minimal()
+  
+```
+
+```{r}
+bakers %>% 
+  mutate(skill = case_when(
+    star_baker > technical_winner ~ "super_start",
+    star_baker < technical_winner ~ "high_tech",
+    TRUE ~ "well_rounded"
+  ))
+```
+
+```{r}
+bakers_skill %>% 
+  filter(star_baker == 0 & technical_winner == 0) %>% 
+  count()
+```
+
+```{r}
+x <- 4
+class(x)
+```
+
+```{r}
+y <- c(4,TRUE)
+class(y)
+```
+
+```{r}
+dim(y)
+```
+
+```{r}
+ x <- list(2, "a", "b", TRUE)
+x[[2]]
+length(x[[2]])
+```
+
+```{r}
+x <- c(3, 5, 1, 10, 12, 6)
+x[x %in% 1:5] <- 0
+x
+```
+
